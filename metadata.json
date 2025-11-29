@@ -1,0 +1,7 @@
+{
+  "name": "InkFlow AI",
+  "description": "A distraction-free, magic writing experience where Gemini acts as your proactive thought partner and editor.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
