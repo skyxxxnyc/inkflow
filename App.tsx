@@ -7,10 +7,11 @@ import { SettingsModal } from './components/SettingsModal';
 import { NavigationSidebar } from './components/NavigationSidebar';
 import { LibraryView } from './components/LibraryView';
 import { CMSConfigModal } from './components/CMSConfigModal';
+import { LoginScreen } from './components/LoginScreen';
 import { Moon, Sun, Plus, PenTool, Layout, FileText, CheckCircle2, Settings, Columns, Eye, Mic, MicOff, Loader2, Check, Download, AlignLeft, FileDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Tooltip } from './components/Tooltip';
 import { getCompletion } from './services/geminiService';
-import { PromptSettings, DEFAULT_PROMPT_SETTINGS, Article, Document, DocumentStatus, CMSConnection } from './types';
+import { PromptSettings, DEFAULT_PROMPT_SETTINGS, Article, Document, DocumentStatus, CMSConnection, Database, User } from './types';
 import { parse } from 'marked';
 import { jsPDF } from 'jspdf';
 
@@ -22,6 +23,22 @@ function App() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [cmsModalOpen, setCmsModalOpen] = useState(false);
   
+  // --- AUTH STATE ---
+  const [user, setUser] = useState<User | null>(() => {
+      const savedUser = localStorage.getItem('inkflow_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+  });
+
+  // --- DATABASE STATE ---
+  const [databases, setDatabases] = useState<Database[]>(() => {
+      const saved = localStorage.getItem('inkflow_databases');
+      return saved ? JSON.parse(saved) : [];
+  });
+  
+  // View Context: If currentDocId is null, we are in Library. 
+  // If currentDatabaseId is set, we filter Library by that DB.
+  const [currentDatabaseId, setCurrentDatabaseId] = useState<string | null>(null);
+
   // --- DOCUMENT MANAGEMENT STATE ---
   const [documents, setDocuments] = useState<Document[]>(() => {
       const savedDocs = localStorage.getItem('inkflow_documents');
@@ -137,6 +154,11 @@ function App() {
       localStorage.setItem('inkflow_cms_connections', JSON.stringify(cmsConnections));
   }, [cmsConnections]);
 
+  // Persist Databases
+  useEffect(() => {
+      localStorage.setItem('inkflow_databases', JSON.stringify(databases));
+  }, [databases]);
+
 
   // Voice Recognition Setup
   useEffect(() => {
@@ -163,12 +185,48 @@ function App() {
 
   // --- ACTIONS ---
 
-  const handleCreateDoc = () => {
+  const handleLogin = (newUser: User) => {
+      setUser(newUser);
+      localStorage.setItem('inkflow_user', JSON.stringify(newUser));
+  };
+
+  const handleLogout = () => {
+      setUser(null);
+      localStorage.removeItem('inkflow_user');
+      setCurrentDocId(null);
+  };
+
+  const handleCreateDatabase = (name: string) => {
+      const newDb: Database = {
+          id: Date.now().toString(),
+          name,
+          createdAt: Date.now()
+      };
+      setDatabases(prev => [...prev, newDb]);
+      setCurrentDatabaseId(newDb.id);
+      setCurrentDocId(null);
+  };
+
+  const handleDeleteDatabase = (id: string) => {
+      if (confirm('Delete this database? Documents will remain in "All Documents".')) {
+          setDatabases(prev => prev.filter(db => db.id !== id));
+          // Unlink documents
+          setDocuments(prev => {
+              const updated = prev.map(doc => doc.databaseId === id ? { ...doc, databaseId: undefined } : doc);
+              localStorage.setItem('inkflow_documents', JSON.stringify(updated));
+              return updated;
+          });
+          if (currentDatabaseId === id) setCurrentDatabaseId(null);
+      }
+  };
+
+  const handleCreateDoc = (targetDatabaseId?: string) => {
       const newDoc: Document = {
           id: Date.now().toString(),
           title: 'Untitled Page',
           content: '',
           status: DocumentStatus.DRAFT,
+          databaseId: targetDatabaseId,
           tags: [],
           createdAt: Date.now(),
           updatedAt: Date.now()
@@ -285,7 +343,12 @@ function App() {
   };
 
   // --- RENDER ---
+  if (!user) {
+      return <LoginScreen onLogin={handleLogin} />;
+  }
+
   const currentDoc = documents.find(d => d.id === currentDocId);
+  const activeDatabase = databases.find(db => db.id === currentDatabaseId);
 
   return (
     <div className={`h-screen flex transition-colors duration-300 overflow-hidden ${darkMode ? 'dark' : ''}`}>
@@ -294,12 +357,19 @@ function App() {
         {navOpen && (
             <NavigationSidebar 
                 documents={documents}
+                databases={databases}
                 currentDocId={currentDocId}
+                currentDatabaseId={currentDatabaseId}
+                user={user}
                 onSelectDoc={setCurrentDocId}
-                onCreateDoc={handleCreateDoc}
-                onGoToLibrary={() => setCurrentDocId(null)}
+                onSelectDatabase={(id) => { setCurrentDatabaseId(id); setCurrentDocId(null); }}
+                onCreateDoc={() => handleCreateDoc(currentDatabaseId || undefined)}
+                onCreateDatabase={handleCreateDatabase}
+                onDeleteDatabase={handleDeleteDatabase}
+                onGoToLibrary={() => { setCurrentDatabaseId(null); setCurrentDocId(null); }}
                 cmsConnections={cmsConnections}
                 onOpenCMSSettings={() => setCmsModalOpen(true)}
+                onLogout={handleLogout}
             />
         )}
 
@@ -318,7 +388,9 @@ function App() {
                              <span className="text-[10px] uppercase bg-gray-200 px-1.5 py-0.5 rounded-sm">{currentDoc.status}</span>
                          </div>
                     ) : (
-                        <h1 className="text-sm font-bold uppercase tracking-wider text-gray-500">Dashboard</h1>
+                        <h1 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+                            {activeDatabase ? activeDatabase.name : 'Dashboard'}
+                        </h1>
                     )}
                 </div>
 
@@ -438,10 +510,12 @@ function App() {
                     // LIBRARY VIEW
                     <LibraryView 
                         documents={documents}
+                        databases={databases}
+                        currentDatabaseId={currentDatabaseId}
                         cmsConnections={cmsConnections}
                         onOpenDoc={setCurrentDocId}
                         onDeleteDoc={handleDeleteDoc}
-                        onCreateDoc={handleCreateDoc}
+                        onCreateDoc={() => handleCreateDoc(currentDatabaseId || undefined)}
                     />
                 )}
             </main>

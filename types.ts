@@ -18,6 +18,13 @@ export enum CMSPlatform {
     DEVTO = 'Dev.to'
 }
 
+export interface User {
+    id: string;
+    email: string;
+    name: string;
+    avatar?: string;
+}
+
 export interface CMSConnection {
     id: string;
     name: string;
@@ -26,12 +33,20 @@ export interface CMSConnection {
     apiKey?: string; // Stored locally only
 }
 
+export interface Database {
+    id: string;
+    name: string;
+    description?: string;
+    createdAt: number;
+}
+
 export interface Document {
     id: string;
     title: string;
     content: string;
     status: DocumentStatus;
     cmsConnectionId?: string; // Linked CMS
+    databaseId?: string; // Linked Database (optional, null = root library)
     tags: string[];
     createdAt: number;
     updatedAt: number;

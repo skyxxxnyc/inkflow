@@ -1,10 +1,12 @@
 
 import React from 'react';
-import { Document, DocumentStatus, CMSConnection } from '../types';
-import { Search, MoreHorizontal, FileEdit, Trash2, Globe, Clock, FilePlus } from 'lucide-react';
+import { Document, DocumentStatus, CMSConnection, Database } from '../types';
+import { Search, MoreHorizontal, FileEdit, Trash2, Globe, Clock, FilePlus, Database as DbIcon, Layout } from 'lucide-react';
 
 interface LibraryViewProps {
     documents: Document[];
+    databases: Database[];
+    currentDatabaseId: string | null;
     cmsConnections: CMSConnection[];
     onOpenDoc: (id: string) => void;
     onDeleteDoc: (id: string) => void;
@@ -13,6 +15,8 @@ interface LibraryViewProps {
 
 export const LibraryView: React.FC<LibraryViewProps> = ({ 
     documents, 
+    databases,
+    currentDatabaseId,
     cmsConnections, 
     onOpenDoc, 
     onDeleteDoc, 
@@ -20,10 +24,17 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 }) => {
     const [filter, setFilter] = React.useState('');
 
-    const filteredDocs = documents.filter(doc => 
-        doc.title.toLowerCase().includes(filter.toLowerCase()) || 
-        doc.content.toLowerCase().includes(filter.toLowerCase())
-    );
+    const activeDb = currentDatabaseId ? databases.find(db => db.id === currentDatabaseId) : null;
+
+    const filteredDocs = documents.filter(doc => {
+        // Filter by database context
+        const matchesDb = currentDatabaseId ? doc.databaseId === currentDatabaseId : true;
+        // Filter by search
+        const matchesSearch = doc.title.toLowerCase().includes(filter.toLowerCase()) || 
+                             doc.content.toLowerCase().includes(filter.toLowerCase());
+        
+        return matchesDb && matchesSearch;
+    });
 
     const formatDate = (ts: number) => new Date(ts).toLocaleDateString();
 
@@ -37,8 +48,16 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             {/* Header */}
             <div className="flex justify-between items-end mb-8">
                 <div>
-                    <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">Library</h1>
-                    <p className="text-gray-500 dark:text-gray-400 font-serif italic">Manage your content database.</p>
+                    <div className="flex items-center gap-2 mb-2 text-gray-500 font-bold uppercase text-xs tracking-wider">
+                        {activeDb ? <DbIcon className="w-4 h-4" /> : <Layout className="w-4 h-4" />}
+                        {activeDb ? 'Database View' : 'Global View'}
+                    </div>
+                    <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">
+                        {activeDb ? activeDb.name : "All Documents"}
+                    </h1>
+                    <p className="text-gray-500 dark:text-gray-400 font-serif italic">
+                        {activeDb ? `Manage content inside ${activeDb.name}.` : "Overview of all your writing."}
+                    </p>
                 </div>
                 <button 
                     onClick={onCreateDoc}
@@ -74,7 +93,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 <div className="flex-1 overflow-y-auto">
                     {filteredDocs.length === 0 ? (
                         <div className="p-8 text-center opacity-50 italic">
-                            No documents found.
+                            No documents found {activeDb ? `in ${activeDb.name}` : ''}.
                         </div>
                     ) : (
                         filteredDocs.map(doc => (
