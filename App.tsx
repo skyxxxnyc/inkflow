@@ -8,6 +8,7 @@ import { NavigationSidebar } from './components/NavigationSidebar';
 import { LibraryView } from './components/LibraryView';
 import { ReadingListView } from './components/ReadingListView';
 import { CMSConfigModal } from './components/CMSConfigModal';
+import { TemplateModal, Template } from './components/TemplateModal';
 import { LoginScreen } from './components/LoginScreen';
 import { Moon, Sun, Plus, PenTool, Layout, FileText, CheckCircle2, Settings, Columns, Eye, Mic, MicOff, Loader2, Check, Download, AlignLeft, FileDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Tooltip } from './components/Tooltip';
@@ -26,6 +27,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [cmsModalOpen, setCmsModalOpen] = useState(false);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
   
   // --- AUTH STATE ---
   const [user, setUser] = useState<User | null>(() => {
@@ -252,11 +254,11 @@ function App() {
       }
   };
 
-  const handleCreateDoc = (targetDatabaseId?: string) => {
+  const handleCreateDoc = (targetDatabaseId?: string, template?: Template) => {
       const newDoc: Document = {
           id: Date.now().toString(),
-          title: 'Untitled Page',
-          content: '',
+          title: template ? template.defaultTitle : 'Untitled Page',
+          content: template ? template.content : '',
           status: DocumentStatus.DRAFT,
           databaseId: targetDatabaseId,
           tags: [],
@@ -270,6 +272,7 @@ function App() {
       });
       setCurrentDocId(newDoc.id);
       setAppMode(AppMode.WRITE);
+      setTemplateModalOpen(false);
   };
 
   const handleDeleteDoc = (id: string) => {
@@ -528,7 +531,7 @@ function App() {
                     currentDocId ? (
                         // EDITOR VIEW
                         <div className="h-full flex justify-center overflow-y-auto">
-                            <div className={`relative h-full transition-all duration-300 w-full flex gap-6 p-4 ${showPreview ? 'max-w-7xl' : 'max-w-3xl'}`}>
+                            <div className={`relative h-full transition-all duration-300 w-full flex gap-6 p-4 ${showPreview ? 'max-w-[95%]' : 'max-w-5xl'}`}>
                                 {/* Editor Column */}
                                 <div className={`relative h-full flex-1 flex flex-col ${showPreview ? 'hidden lg:flex' : ''}`}>
                                     <div className="flex-1 relative min-h-[500px]">
@@ -584,6 +587,7 @@ function App() {
                             onOpenDoc={(id) => { setCurrentDocId(id); setAppMode(AppMode.WRITE); }}
                             onDeleteDoc={handleDeleteDoc}
                             onCreateDoc={() => handleCreateDoc(currentDatabaseId || undefined)}
+                            onOpenTemplates={() => setTemplateModalOpen(true)}
                         />
                     )
                 )}
@@ -591,6 +595,12 @@ function App() {
         </div>
 
         {/* --- MODALS & OVERLAYS --- */}
+        <TemplateModal 
+            isOpen={templateModalOpen}
+            onClose={() => setTemplateModalOpen(false)}
+            onSelectTemplate={(t) => handleCreateDoc(currentDatabaseId || undefined, t)}
+        />
+
         <DraftingSidebar 
             isOpen={sidebarOpen} 
             onClose={() => setSidebarOpen(false)} 
@@ -599,6 +609,7 @@ function App() {
             onRemoveArticle={uri => setSavedArticles(prev => prev.filter(a => a.uri !== uri))}
             cmsConnections={cmsConnections}
             onSetDocCMS={handleSetDocCMS}
+            currentDocContent={content}
         />
         
         <FloatingMenu 

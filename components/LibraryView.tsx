@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Document, DocumentStatus, CMSConnection, Database } from '../types';
-import { Search, MoreHorizontal, FileEdit, Trash2, Globe, Clock, FilePlus, Database as DbIcon, Layout } from 'lucide-react';
+import { Search, MoreHorizontal, FileEdit, Trash2, Globe, Clock, FilePlus, Database as DbIcon, Layout, Copy } from 'lucide-react';
 
 interface LibraryViewProps {
     documents: Document[];
@@ -11,6 +11,7 @@ interface LibraryViewProps {
     onOpenDoc: (id: string) => void;
     onDeleteDoc: (id: string) => void;
     onCreateDoc: () => void;
+    onOpenTemplates: () => void;
 }
 
 export const LibraryView: React.FC<LibraryViewProps> = ({ 
@@ -20,7 +21,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     cmsConnections, 
     onOpenDoc, 
     onDeleteDoc, 
-    onCreateDoc 
+    onCreateDoc,
+    onOpenTemplates
 }) => {
     const [filter, setFilter] = React.useState('');
 
@@ -59,12 +61,21 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                         {activeDb ? `Manage content inside ${activeDb.name}.` : "Overview of all your writing."}
                     </p>
                 </div>
-                <button 
-                    onClick={onCreateDoc}
-                    className="flex items-center gap-2 px-6 py-3 bg-nb-yellow border-2 border-black shadow-neo hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-neo-sm transition-all font-bold uppercase text-black"
-                >
-                    <FilePlus className="w-5 h-5" /> New Page
-                </button>
+                
+                <div className="flex gap-2">
+                    <button 
+                        onClick={onOpenTemplates}
+                        className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-black border-2 border-black dark:border-white shadow-neo hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-neo-sm transition-all font-bold uppercase text-black dark:text-white"
+                    >
+                        <Copy className="w-5 h-5" /> Templates
+                    </button>
+                    <button 
+                        onClick={onCreateDoc}
+                        className="flex items-center gap-2 px-6 py-3 bg-nb-yellow border-2 border-black shadow-neo hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-neo-sm transition-all font-bold uppercase text-black"
+                    >
+                        <FilePlus className="w-5 h-5" /> New Page
+                    </button>
+                </div>
             </div>
 
             {/* Filter Bar */}

@@ -76,6 +76,13 @@ export interface Suggestion {
     type: 'tone' | 'grammar' | 'clarity' | 'creative';
 }
 
+export interface ChatMessage {
+    id: string;
+    role: 'user' | 'model';
+    text: string;
+    timestamp: number;
+}
+
 export interface FileAttachment {
     name: string;
     type: string;

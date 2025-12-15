@@ -1,8 +1,8 @@
 
-import React, { useState, useRef } from 'react';
-import { X, Paperclip, Sparkles, Loader2, FileText, Search, Briefcase, PenTool, Bookmark, ExternalLink, Trash2, Globe } from 'lucide-react';
-import { draftFromScratch, generateSeoArticle, optimizeResume } from '../services/geminiService';
-import { FileAttachment, Article, CMSConnection } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, Paperclip, Sparkles, Loader2, FileText, Search, Briefcase, PenTool, Bookmark, ExternalLink, Trash2, Globe, MessageSquare, Send, Copy, ArrowLeft } from 'lucide-react';
+import { draftFromScratch, generateSeoArticle, optimizeResume, chatWithPartner } from '../services/geminiService';
+import { FileAttachment, Article, CMSConnection, ChatMessage } from '../types';
 
 interface DraftingSidebarProps {
     isOpen: boolean;
@@ -10,11 +10,12 @@ interface DraftingSidebarProps {
     onDraftInsert: (text: string) => void;
     savedArticles: Article[];
     onRemoveArticle: (uri: string) => void;
-    cmsConnections?: CMSConnection[]; // Optional for now
+    cmsConnections?: CMSConnection[]; 
     onSetDocCMS?: (cmsId: string) => void;
+    currentDocContent: string;
 }
 
-type ModuleMode = 'creative' | 'seo' | 'resume' | 'saved';
+type ModuleMode = 'creative' | 'seo' | 'resume' | 'saved' | 'chat';
 
 export const DraftingSidebar: React.FC<DraftingSidebarProps> = ({ 
     isOpen, 
@@ -23,12 +24,20 @@ export const DraftingSidebar: React.FC<DraftingSidebarProps> = ({
     savedArticles, 
     onRemoveArticle,
     cmsConnections = [],
-    onSetDocCMS
+    onSetDocCMS,
+    currentDocContent
 }) => {
-    const [mode, setMode] = useState<ModuleMode>('creative');
+    const [mode, setMode] = useState<ModuleMode>('chat');
     const [isGenerating, setIsGenerating] = useState(false);
     const [files, setFiles] = useState<FileAttachment[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Chat State
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+        { id: '1', role: 'model', text: 'Hi! I am your InkFlow partner. I have read your current draft. How can I help you brainstorming or editing today?', timestamp: Date.now() }
+    ]);
+    const [chatInput, setChatInput] = useState('');
+    const chatEndRef = useRef<HTMLDivElement>(null);
 
     // Creative Inputs
     const [prompt, setPrompt] = useState('');
@@ -43,6 +52,12 @@ export const DraftingSidebar: React.FC<DraftingSidebarProps> = ({
 
     // Resume Inputs
     const [jobInput, setJobInput] = useState(''); // Text or URL
+
+    useEffect(() => {
+        if (mode === 'chat') {
+            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [chatMessages, mode]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
@@ -60,6 +75,22 @@ export const DraftingSidebar: React.FC<DraftingSidebarProps> = ({
         }
     };
 
+    const handleSendMessage = async () => {
+        if (!chatInput.trim() || isGenerating) return;
+
+        const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text: chatInput, timestamp: Date.now() };
+        setChatMessages(prev => [...prev, userMsg]);
+        setChatInput('');
+        setIsGenerating(true);
+
+        // Call Gemini
+        const response = await chatWithPartner(chatMessages, userMsg.text, currentDocContent);
+        
+        const aiMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: response, timestamp: Date.now() };
+        setChatMessages(prev => [...prev, aiMsg]);
+        setIsGenerating(false);
+    };
+
     const handleGenerate = async () => {
         setIsGenerating(true);
         let text = '';
@@ -71,7 +102,6 @@ export const DraftingSidebar: React.FC<DraftingSidebarProps> = ({
             } else if (mode === 'seo') {
                 if (!seoTopic) return;
                 text = await generateSeoArticle(seoTopic, seoKeywords, seoAudience, seoTone);
-                // If a CMS was selected, link it to the document (via callback)
                 if (selectedCMS && onSetDocCMS) {
                     onSetDocCMS(selectedCMS);
                 }
@@ -85,7 +115,10 @@ export const DraftingSidebar: React.FC<DraftingSidebarProps> = ({
             }
             
             onDraftInsert(text);
+            // Don't close sidebar automatically in some modes, but maybe for draft generation it makes sense.
+            // Keeping existing behavior:
             onClose();
+            
             // Reset fields
             setPrompt('');
             setContext('');
@@ -105,11 +138,12 @@ export const DraftingSidebar: React.FC<DraftingSidebarProps> = ({
         <div className="fixed inset-y-0 right-0 w-[450px] max-w-full bg-nb-paper dark:bg-nb-darkPaper border-l-4 border-black dark:border-white shadow-[-10px_0px_0px_0px_rgba(0,0,0,0.2)] z-50 flex flex-col transition-transform transform">
             <div className="flex justify-between items-center p-6 border-b-2 border-black dark:border-white bg-nb-bg dark:bg-nb-darkBg">
                 <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
+                    {mode === 'chat' && <MessageSquare className="w-5 h-5" />}
                     {mode === 'creative' && <PenTool className="w-5 h-5" />}
                     {mode === 'seo' && <Search className="w-5 h-5" />}
                     {mode === 'resume' && <Briefcase className="w-5 h-5" />}
                     {mode === 'saved' && <Bookmark className="w-5 h-5" />}
-                    Creation Hub
+                    {mode === 'chat' ? 'Partner Chat' : 'Creation Hub'}
                 </h2>
                 <button onClick={onClose} className="p-2 hover:bg-white dark:hover:bg-black border-2 border-transparent hover:border-black dark:hover:border-white transition-all">
                     <X className="w-6 h-6" />
@@ -119,10 +153,16 @@ export const DraftingSidebar: React.FC<DraftingSidebarProps> = ({
             {/* Tabs */}
             <div className="flex border-b-2 border-black dark:border-white overflow-x-auto no-scrollbar">
                 <button 
+                    onClick={() => setMode('chat')}
+                    className={`flex-1 py-3 px-2 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-r-2 border-black dark:border-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors whitespace-nowrap ${mode === 'chat' ? 'bg-black text-white dark:bg-white dark:text-black' : ''}`}
+                >
+                    <MessageSquare className="w-3 h-3" /> Chat
+                </button>
+                <button 
                     onClick={() => setMode('creative')}
                     className={`flex-1 py-3 px-2 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-r-2 border-black dark:border-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors whitespace-nowrap ${mode === 'creative' ? 'bg-nb-yellow text-black' : ''}`}
                 >
-                    <PenTool className="w-3 h-3" /> Creative
+                    <PenTool className="w-3 h-3" /> Draft
                 </button>
                 <button 
                     onClick={() => setMode('seo')}
@@ -144,8 +184,48 @@ export const DraftingSidebar: React.FC<DraftingSidebarProps> = ({
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50 dark:bg-nb-darkBg">
                 
+                {/* --- CHAT MODE --- */}
+                {mode === 'chat' && (
+                    <div className="flex flex-col h-full">
+                         <div className="flex-1 space-y-4 pb-4">
+                            {chatMessages.map((msg, idx) => (
+                                <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div 
+                                        className={`
+                                            max-w-[85%] p-4 text-sm font-medium leading-relaxed
+                                            ${msg.role === 'user' 
+                                                ? 'bg-black text-white dark:bg-white dark:text-black rounded-tl-2xl rounded-tr-sm rounded-bl-2xl rounded-br-2xl shadow-neo' 
+                                                : 'bg-white dark:bg-black border-2 border-black dark:border-white rounded-tl-sm rounded-tr-2xl rounded-bl-2xl rounded-br-2xl shadow-neo-sm'
+                                            }
+                                        `}
+                                    >
+                                        <div className="whitespace-pre-wrap">{msg.text}</div>
+                                        {msg.role === 'model' && (
+                                            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-2">
+                                                <button 
+                                                    onClick={() => { navigator.clipboard.writeText(msg.text); }}
+                                                    className="text-[10px] font-bold uppercase flex items-center gap-1 hover:text-nb-blue transition-colors"
+                                                >
+                                                    <Copy className="w-3 h-3" /> Copy
+                                                </button>
+                                                <button 
+                                                    onClick={() => onDraftInsert(msg.text)}
+                                                    className="text-[10px] font-bold uppercase flex items-center gap-1 hover:text-nb-green transition-colors"
+                                                >
+                                                    <ArrowLeft className="w-3 h-3" /> Insert
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                            <div ref={chatEndRef} />
+                         </div>
+                    </div>
+                )}
+
                 {/* --- CREATIVE MODE --- */}
                 {mode === 'creative' && (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
@@ -338,7 +418,35 @@ export const DraftingSidebar: React.FC<DraftingSidebarProps> = ({
                 )}
             </div>
 
-            {mode !== 'saved' && (
+            {/* Chat Input or Generate Button */}
+            {mode === 'chat' ? (
+                <div className="p-4 bg-nb-bg dark:bg-nb-darkBg border-t-2 border-black dark:border-white">
+                    <div className="relative">
+                        <textarea 
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSendMessage();
+                                }
+                            }}
+                            className="w-full p-4 pr-12 bg-white dark:bg-black border-2 border-black dark:border-white font-medium text-sm focus:shadow-neo focus:outline-none resize-none h-16"
+                            placeholder="Ask your partner..."
+                        />
+                        <button 
+                            onClick={handleSendMessage}
+                            disabled={!chatInput.trim() || isGenerating}
+                            className="absolute right-2 top-2 p-2 bg-black text-white dark:bg-white dark:text-black rounded-sm hover:opacity-80 disabled:opacity-50 transition-opacity"
+                        >
+                            {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        </button>
+                    </div>
+                    <div className="text-[10px] text-center mt-2 font-bold uppercase text-gray-400">
+                        AI reads your current document context
+                    </div>
+                </div>
+            ) : mode !== 'saved' && (
                 <div className="p-6 bg-nb-bg dark:bg-nb-darkBg border-t-2 border-black dark:border-white">
                     <button 
                         onClick={handleGenerate}

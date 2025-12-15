@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
-import { FileAttachment } from '../types';
+import { FileAttachment, ChatMessage } from '../types';
 
 const getAi = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -134,6 +135,54 @@ export const getCompletion = async (text: string): Promise<string> => {
         return "";
     }
 };
+
+export const chatWithPartner = async (history: ChatMessage[], newMessage: string, currentDocContext: string): Promise<string> => {
+    const ai = getAi();
+    
+    // Construct history for Gemini
+    // We inject the document context as a "hidden" user message at the start or via system instructions.
+    // To keep it fresh, we'll treat it as a fresh stateless request with history included.
+    
+    const contents: any[] = [
+        {
+            role: 'user',
+            parts: [{ text: `CONTEXT: I am currently writing a document. Here is the current content:\n\n---\n${currentDocContext}\n---\n\nPlease act as my co-author and editor. Answer my questions based on this text.` }]
+        },
+        {
+            role: 'model',
+            parts: [{ text: "Understood. I have read your document and I am ready to help you write, edit, and brainstorm." }]
+        }
+    ];
+
+    // Add conversation history
+    history.forEach(msg => {
+        contents.push({
+            role: msg.role,
+            parts: [{ text: msg.text }]
+        });
+    });
+
+    // Add new message
+    contents.push({
+        role: 'user',
+        parts: [{ text: newMessage }]
+    });
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-preview',
+            contents: contents,
+            config: {
+                systemInstruction: "You are a witty, intelligent, and helpful writing partner. Keep your answers concise unless asked to elaborate.",
+            }
+        });
+        return response.text || "";
+    } catch (e) {
+        console.error("Chat Error", e);
+        return "Sorry, I lost my train of thought. Please try again.";
+    }
+};
+
 
 // Agentic Research Check
 export const checkFacts = async (text: string): Promise<any> => {
@@ -283,7 +332,9 @@ export const findRelatedArticles = async (topic: string): Promise<any[]> => {
             .map((c: any) => ({
                 title: c.web.title,
                 url: c.web.uri,
-                domain: new URL(c.web.uri).hostname.replace('www.', '')
+                domain: new URL(c.web.uri).hostname.replace('www.', ''),
+                snippet: c.web.snippet || "",
+                date: "Recently Indexed"
             }));
             
         // Deduplicate

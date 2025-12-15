@@ -86,6 +86,7 @@ export const ReadingListView: React.FC<ReadingListViewProps> = ({ items, onAddIt
             url: res.url,
             title: res.title,
             domain: res.domain,
+            excerpt: res.snippet,
             tags: ['Discovered'],
             status: 'unread',
             addedAt: Date.now(),
@@ -162,14 +163,14 @@ export const ReadingListView: React.FC<ReadingListViewProps> = ({ items, onAddIt
                 {view === 'discover' ? (
                     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
                         <div className="bg-nb-blue border-2 border-black dark:border-white shadow-neo p-8 text-center">
-                            <h2 className="text-2xl font-black uppercase mb-4">Discover New Content</h2>
-                            <p className="font-serif italic mb-6">Use AI to find high-quality articles related to your interests.</p>
+                            <h2 className="text-2xl font-black uppercase mb-4 text-black">Discover New Content</h2>
+                            <p className="font-serif italic mb-6 text-black">Use AI to find high-quality articles related to your interests.</p>
                             <div className="flex max-w-lg mx-auto relative">
                                 <input 
                                     value={discoverTopic}
                                     onChange={(e) => setDiscoverTopic(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && handleDiscover()}
-                                    className="w-full p-4 border-2 border-black dark:border-white shadow-neo-sm focus:outline-none"
+                                    className="w-full p-4 border-2 border-black dark:border-white shadow-neo-sm focus:outline-none bg-white dark:bg-black text-black dark:text-white"
                                     placeholder="e.g. 'Future of React Server Components'..."
                                 />
                                 <button 
@@ -184,19 +185,28 @@ export const ReadingListView: React.FC<ReadingListViewProps> = ({ items, onAddIt
 
                         <div className="grid gap-4">
                             {discoverResults.map((res, i) => (
-                                <div key={i} className="bg-white dark:bg-nb-darkPaper border-2 border-black dark:border-white p-4 flex justify-between items-center shadow-neo-sm">
-                                    <div>
-                                        <h3 className="font-bold text-lg mb-1">{res.title}</h3>
-                                        <div className="flex items-center gap-2 text-xs text-gray-500 uppercase font-bold">
-                                            <Globe className="w-3 h-3" /> {res.domain}
+                                <div key={i} className="bg-white dark:bg-nb-darkPaper border-2 border-black dark:border-white p-4 flex flex-col gap-2 shadow-neo-sm hover:translate-x-[1px] hover:translate-y-[1px] transition-all">
+                                    <div className="flex justify-between items-start gap-4">
+                                        <div>
+                                            <h3 className="font-bold text-lg leading-tight mb-1 text-black dark:text-white">{res.title}</h3>
+                                            <div className="flex items-center gap-2 text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-2">
+                                                <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> {res.domain}</span>
+                                                <span>•</span>
+                                                <span>{res.date || 'Recently Discovered'}</span>
+                                            </div>
                                         </div>
+                                        <button 
+                                            onClick={() => addDiscoveredItem(res)}
+                                            className="shrink-0 px-4 py-2 border-2 border-black dark:border-white bg-white dark:bg-black hover:bg-nb-green hover:text-white dark:hover:text-white transition-colors font-bold text-xs uppercase flex items-center gap-2"
+                                        >
+                                            <Plus className="w-4 h-4" /> Save
+                                        </button>
                                     </div>
-                                    <button 
-                                        onClick={() => addDiscoveredItem(res)}
-                                        className="px-4 py-2 border-2 border-black dark:border-white hover:bg-nb-green hover:text-white transition-colors font-bold text-xs uppercase flex items-center gap-2"
-                                    >
-                                        <Plus className="w-4 h-4" /> Save
-                                    </button>
+                                    {res.snippet && (
+                                        <p className="text-sm text-gray-600 dark:text-gray-300 font-serif leading-relaxed line-clamp-2">
+                                            {res.snippet}
+                                        </p>
+                                    )}
                                 </div>
                             ))}
                             {discoverResults.length === 0 && !isDiscovering && discoverTopic && (
