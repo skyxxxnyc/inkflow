@@ -1,7 +1,8 @@
 
 export enum AppMode {
     WRITE = 'WRITE',
-    DRAFT = 'DRAFT', // The agentic drafting mode
+    DRAFT = 'DRAFT',
+    READ = 'READ' // New mode for Pocket clone
 }
 
 export enum DocumentStatus {
@@ -30,7 +31,7 @@ export interface CMSConnection {
     name: string;
     platform: CMSPlatform;
     url?: string;
-    apiKey?: string; // Stored locally only
+    apiKey?: string;
 }
 
 export interface Database {
@@ -45,11 +46,26 @@ export interface Document {
     title: string;
     content: string;
     status: DocumentStatus;
-    cmsConnectionId?: string; // Linked CMS
-    databaseId?: string; // Linked Database (optional, null = root library)
+    cmsConnectionId?: string;
+    databaseId?: string;
     tags: string[];
     createdAt: number;
     updatedAt: number;
+}
+
+// Updated from simple 'Article' to robust Reading Item
+export interface ReadingItem {
+    id: string;
+    url: string;
+    title: string;
+    domain: string;
+    excerpt?: string;
+    image?: string; // OG Image
+    tags: string[];
+    status: 'unread' | 'archived' | 'favorite';
+    addedAt: number;
+    aiSummary?: string;
+    sourceType: 'manual' | 'rss' | 'discovery';
 }
 
 export interface Suggestion {
@@ -60,17 +76,13 @@ export interface Suggestion {
     type: 'tone' | 'grammar' | 'clarity' | 'creative';
 }
 
-export interface GenerationConfig {
-    model: string;
-    temperature: number;
-}
-
 export interface FileAttachment {
     name: string;
     type: string;
     data: string; // base64
 }
 
+// Deprecated in favor of ReadingItem, but kept for legacy props compatibility if needed
 export interface Article {
     title: string;
     uri: string;

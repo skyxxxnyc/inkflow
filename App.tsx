@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { DraftingSidebar } from './components/DraftingSidebar';
 import { FloatingMenu } from './components/FloatingMenu';
@@ -5,12 +6,13 @@ import { ProactiveAgent } from './components/ProactiveAgent';
 import { SettingsModal } from './components/SettingsModal';
 import { NavigationSidebar } from './components/NavigationSidebar';
 import { LibraryView } from './components/LibraryView';
+import { ReadingListView } from './components/ReadingListView';
 import { CMSConfigModal } from './components/CMSConfigModal';
 import { LoginScreen } from './components/LoginScreen';
 import { Moon, Sun, Plus, PenTool, Layout, FileText, CheckCircle2, Settings, Columns, Eye, Mic, MicOff, Loader2, Check, Download, AlignLeft, FileDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Tooltip } from './components/Tooltip';
 import { getCompletion } from './services/geminiService';
-import { PromptSettings, DEFAULT_PROMPT_SETTINGS, Article, Document, DocumentStatus, CMSConnection, Database, User } from './types';
+import { PromptSettings, DEFAULT_PROMPT_SETTINGS, Article, Document, DocumentStatus, CMSConnection, Database, User, AppMode, ReadingItem } from './types';
 import { parse } from 'marked';
 import { jsPDF } from 'jspdf';
 
@@ -35,10 +37,18 @@ function App() {
   const [databases, setDatabases] = useState<Database[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [cmsConnections, setCmsConnections] = useState<CMSConnection[]>([]);
-  const [savedArticles, setSavedArticles] = useState<Article[]>([]);
+  
+  // Legacy support map: Mapping old Article[] to new ReadingItem[] if needed, 
+  // but for simplicity we will maintain a separate readingList state.
+  // We keep savedArticles for the DraftingSidebar compatibility but sync logically if we wanted to.
+  // For this implementation, readingList is the source of truth for the Pocket clone.
+  const [readingList, setReadingList] = useState<ReadingItem[]>([]);
+  const [savedArticles, setSavedArticles] = useState<Article[]>([]); // Kept for legacy components
+
   const [promptSettings, setPromptSettings] = useState<PromptSettings>(DEFAULT_PROMPT_SETTINGS);
 
   // View Context
+  const [appMode, setAppMode] = useState<AppMode>(AppMode.WRITE);
   const [currentDatabaseId, setCurrentDatabaseId] = useState<string | null>(null);
   const [currentDocId, setCurrentDocId] = useState<string | null>(null);
   
@@ -82,6 +92,7 @@ function App() {
         setDatabases(load('databases', []));
         setCmsConnections(load('cms_connections', []));
         setSavedArticles(load('saved_articles', []));
+        setReadingList(load('reading_list', []));
         setPromptSettings(load('prompt_settings', DEFAULT_PROMPT_SETTINGS));
 
         // Documents have special migration logic for legacy data
@@ -92,8 +103,6 @@ function App() {
             // Check for legacy global data to migrate
             const legacyDocs = localStorage.getItem('inkflow_documents');
             if (legacyDocs) {
-                // If this is the very first user login after update, maybe migrate?
-                // For safety, let's just copy it for this user so they don't lose work.
                 setDocuments(JSON.parse(legacyDocs));
             } else {
                 setDocuments([]);
@@ -105,9 +114,11 @@ function App() {
         setDocuments([]);
         setCmsConnections([]);
         setSavedArticles([]);
+        setReadingList([]);
         setPromptSettings(DEFAULT_PROMPT_SETTINGS);
         setCurrentDocId(null);
         setCurrentDatabaseId(null);
+        setAppMode(AppMode.WRITE);
     }
   }, [user]);
 
@@ -125,6 +136,10 @@ function App() {
   }, [savedArticles, user]);
   
   useEffect(() => {
+      if (user) localStorage.setItem(getStorageKey('reading_list', user.id), JSON.stringify(readingList));
+  }, [readingList, user]);
+  
+  useEffect(() => {
       if (user) localStorage.setItem(getStorageKey('prompt_settings', user.id), JSON.stringify(promptSettings));
   }, [promptSettings, user]);
 
@@ -134,6 +149,7 @@ function App() {
     if (currentDocId) {
         const doc = documents.find(d => d.id === currentDocId);
         if (doc) setContent(doc.content);
+        setAppMode(AppMode.WRITE); // Switch back to write mode when selecting doc
     } else {
         setContent(''); // Library view
     }
@@ -220,6 +236,7 @@ function App() {
       setDatabases(prev => [...prev, newDb]);
       setCurrentDatabaseId(newDb.id);
       setCurrentDocId(null);
+      setAppMode(AppMode.WRITE);
   };
 
   const handleDeleteDatabase = (id: string) => {
@@ -252,6 +269,7 @@ function App() {
           return updated;
       });
       setCurrentDocId(newDoc.id);
+      setAppMode(AppMode.WRITE);
   };
 
   const handleDeleteDoc = (id: string) => {
@@ -357,6 +375,29 @@ function App() {
       else { try { recognitionRef.current?.start(); setIsListening(true); } catch(e){} }
   };
 
+  const handleSaveArticle = (article: Article) => {
+      // Compatibility handler: Save to 'Saved Articles' legacy list AND new reading list
+      setSavedArticles(prev => {
+          if (prev.some(a => a.uri === article.uri)) return prev.filter(a => a.uri !== article.uri);
+          return [...prev, article];
+      });
+
+      setReadingList(prev => {
+          if (prev.some(i => i.url === article.uri)) return prev;
+          const newItem: ReadingItem = {
+              id: Date.now().toString(),
+              url: article.uri,
+              title: article.title,
+              domain: article.domain,
+              tags: [],
+              status: 'unread',
+              addedAt: Date.now(),
+              sourceType: 'manual'
+          };
+          return [...prev, newItem];
+      });
+  };
+
   // --- RENDER ---
   if (!user) {
       return <LoginScreen onLogin={handleLogin} />;
@@ -377,14 +418,16 @@ function App() {
                 currentDatabaseId={currentDatabaseId}
                 user={user}
                 onSelectDoc={setCurrentDocId}
-                onSelectDatabase={(id) => { setCurrentDatabaseId(id); setCurrentDocId(null); }}
+                onSelectDatabase={(id) => { setCurrentDatabaseId(id); setCurrentDocId(null); setAppMode(AppMode.WRITE); }}
                 onCreateDoc={() => handleCreateDoc(currentDatabaseId || undefined)}
                 onCreateDatabase={handleCreateDatabase}
                 onDeleteDatabase={handleDeleteDatabase}
-                onGoToLibrary={() => { setCurrentDatabaseId(null); setCurrentDocId(null); }}
+                onGoToLibrary={() => { setCurrentDatabaseId(null); setCurrentDocId(null); setAppMode(AppMode.WRITE); }}
+                onGoToReader={() => { setAppMode(AppMode.READ); setCurrentDocId(null); }}
                 cmsConnections={cmsConnections}
                 onOpenCMSSettings={() => setCmsModalOpen(true)}
                 onLogout={handleLogout}
+                currentMode={appMode}
             />
         )}
 
@@ -392,146 +435,157 @@ function App() {
         <div className="flex-1 flex flex-col h-full bg-nb-bg dark:bg-nb-darkBg min-w-0">
             
             {/* --- HEADER --- */}
-            <header className="h-16 bg-nb-paper dark:bg-nb-darkPaper border-b-2 border-black dark:border-white flex items-center justify-between px-6 shrink-0 z-30">
-                <div className="flex items-center gap-3">
-                    <button onClick={() => setNavOpen(!navOpen)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-sm">
-                        {navOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
-                    </button>
-                    {currentDoc ? (
-                         <div className="flex items-center gap-2">
-                             <h1 className="text-sm font-bold truncate max-w-[200px]">{currentDoc.title || "Untitled"}</h1>
-                             <span className="text-[10px] uppercase bg-gray-200 px-1.5 py-0.5 rounded-sm">{currentDoc.status}</span>
-                         </div>
-                    ) : (
-                        <h1 className="text-sm font-bold uppercase tracking-wider text-gray-500">
-                            {activeDatabase ? activeDatabase.name : 'Dashboard'}
-                        </h1>
-                    )}
-                </div>
-
-                <div className="flex items-center gap-4">
-                    {currentDocId && (
-                        <>
-                            <div className="hidden md:flex items-center gap-4 text-xs font-mono font-bold text-gray-500 border-r-2 border-gray-200 pr-4 mr-2">
-                                <span className="flex items-center gap-1">
-                                    {saveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin"/> : <Check className="w-3 h-3"/>}
-                                    {saveStatus}
-                                </span>
-                                <span>{content.trim() === '' ? 0 : content.trim().split(/\s+/).length} w</span>
+            {appMode === AppMode.WRITE && (
+                <header className="h-16 bg-nb-paper dark:bg-nb-darkPaper border-b-2 border-black dark:border-white flex items-center justify-between px-6 shrink-0 z-30">
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setNavOpen(!navOpen)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-sm">
+                            {navOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
+                        </button>
+                        {currentDoc ? (
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-sm font-bold truncate max-w-[200px]">{currentDoc.title || "Untitled"}</h1>
+                                <span className="text-[10px] uppercase bg-gray-200 px-1.5 py-0.5 rounded-sm">{currentDoc.status}</span>
                             </div>
+                        ) : (
+                            <h1 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+                                {activeDatabase ? activeDatabase.name : 'Dashboard'}
+                            </h1>
+                        )}
+                    </div>
 
-                            <Tooltip content={isListening ? "Stop Voice" : "Start Voice"}>
-                                <button onClick={toggleListening} className={`p-2 border-2 border-black dark:border-white rounded-full ${isListening ? 'bg-nb-red text-white animate-pulse' : 'hover:bg-gray-100'}`}>
-                                    {isListening ? <MicOff className="w-4 h-4"/> : <Mic className="w-4 h-4"/>}
-                                </button>
-                            </Tooltip>
+                    <div className="flex items-center gap-4">
+                        {currentDocId && (
+                            <>
+                                <div className="hidden md:flex items-center gap-4 text-xs font-mono font-bold text-gray-500 border-r-2 border-gray-200 pr-4 mr-2">
+                                    <span className="flex items-center gap-1">
+                                        {saveStatus === 'saving' ? <Loader2 className="w-3 h-3 animate-spin"/> : <Check className="w-3 h-3"/>}
+                                        {saveStatus}
+                                    </span>
+                                    <span>{content.trim() === '' ? 0 : content.trim().split(/\s+/).length} w</span>
+                                </div>
 
-                            <div className="relative">
-                                <Tooltip content="Export">
-                                    <button onClick={() => setExportMenuOpen(!exportMenuOpen)} className="p-2 border-2 border-black dark:border-white hover:bg-gray-100">
-                                        <Download className="w-4 h-4" />
+                                <Tooltip content={isListening ? "Stop Voice" : "Start Voice"}>
+                                    <button onClick={toggleListening} className={`p-2 border-2 border-black dark:border-white rounded-full ${isListening ? 'bg-nb-red text-white animate-pulse' : 'hover:bg-gray-100'}`}>
+                                        {isListening ? <MicOff className="w-4 h-4"/> : <Mic className="w-4 h-4"/>}
                                     </button>
                                 </Tooltip>
-                                {exportMenuOpen && (
-                                    <div className="absolute top-full right-0 mt-2 w-48 bg-nb-paper border-2 border-black shadow-neo z-50 flex flex-col py-2">
-                                         <button onClick={() => handleExport('md')} className="px-4 py-2 hover:bg-nb-yellow text-left text-sm font-bold uppercase flex gap-2">
-                                            <FileText className="w-4 h-4"/> Markdown
-                                         </button>
-                                         <button onClick={() => handleExport('txt')} className="px-4 py-2 hover:bg-nb-blue text-left text-sm font-bold uppercase flex gap-2">
-                                            <AlignLeft className="w-4 h-4"/> Plain Text
-                                         </button>
-                                         <button onClick={() => handleExport('pdf')} className="px-4 py-2 hover:bg-nb-red text-left text-sm font-bold uppercase flex gap-2">
-                                            <FileDown className="w-4 h-4"/> PDF
-                                         </button>
-                                    </div>
-                                )}
-                            </div>
 
-                            <Tooltip content="Drafting Tools">
-                                <button onClick={() => setSidebarOpen(true)} className="flex items-center gap-2 px-3 py-1.5 bg-nb-yellow border-2 border-black shadow-neo hover:translate-x-[1px] hover:translate-y-[1px] text-sm font-bold">
-                                    <Plus className="w-4 h-4" /> Tools
+                                <div className="relative">
+                                    <Tooltip content="Export">
+                                        <button onClick={() => setExportMenuOpen(!exportMenuOpen)} className="p-2 border-2 border-black dark:border-white hover:bg-gray-100">
+                                            <Download className="w-4 h-4" />
+                                        </button>
+                                    </Tooltip>
+                                    {exportMenuOpen && (
+                                        <div className="absolute top-full right-0 mt-2 w-48 bg-nb-paper border-2 border-black shadow-neo z-50 flex flex-col py-2">
+                                            <button onClick={() => handleExport('md')} className="px-4 py-2 hover:bg-nb-yellow text-left text-sm font-bold uppercase flex gap-2">
+                                                <FileText className="w-4 h-4"/> Markdown
+                                            </button>
+                                            <button onClick={() => handleExport('txt')} className="px-4 py-2 hover:bg-nb-blue text-left text-sm font-bold uppercase flex gap-2">
+                                                <AlignLeft className="w-4 h-4"/> Plain Text
+                                            </button>
+                                            <button onClick={() => handleExport('pdf')} className="px-4 py-2 hover:bg-nb-red text-left text-sm font-bold uppercase flex gap-2">
+                                                <FileDown className="w-4 h-4"/> PDF
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <Tooltip content="Drafting Tools">
+                                    <button onClick={() => setSidebarOpen(true)} className="flex items-center gap-2 px-3 py-1.5 bg-nb-yellow border-2 border-black shadow-neo hover:translate-x-[1px] hover:translate-y-[1px] text-sm font-bold">
+                                        <Plus className="w-4 h-4" /> Tools
+                                    </button>
+                                </Tooltip>
+
+                                <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+                                <button onClick={() => setShowPreview(!showPreview)} className={`p-2 border-2 border-black dark:border-white ${showPreview ? 'bg-black text-white' : 'hover:bg-gray-100'}`}>
+                                    <Columns className="w-4 h-4" />
                                 </button>
-                            </Tooltip>
-
-                            <div className="w-px h-6 bg-gray-300 mx-1"></div>
-
-                            <button onClick={() => setShowPreview(!showPreview)} className={`p-2 border-2 border-black dark:border-white ${showPreview ? 'bg-black text-white' : 'hover:bg-gray-100'}`}>
-                                <Columns className="w-4 h-4" />
-                            </button>
-                        </>
-                    )}
-                    
-                    <button onClick={() => setSettingsOpen(true)} className="p-2 hover:bg-gray-100 rounded-sm">
-                        <Settings className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setDarkMode(!darkMode)} className="p-2 hover:bg-gray-100 rounded-sm">
-                        {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                    </button>
-                </div>
-            </header>
+                            </>
+                        )}
+                        
+                        <button onClick={() => setSettingsOpen(true)} className="p-2 hover:bg-gray-100 rounded-sm">
+                            <Settings className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setDarkMode(!darkMode)} className="p-2 hover:bg-gray-100 rounded-sm">
+                            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                        </button>
+                    </div>
+                </header>
+            )}
 
             {/* --- CONTENT --- */}
             <main className="flex-1 overflow-hidden relative">
-                {currentDocId ? (
-                    // EDITOR VIEW
-                    <div className="h-full flex justify-center overflow-y-auto">
-                        <div className={`relative h-full transition-all duration-300 w-full flex gap-6 p-4 ${showPreview ? 'max-w-7xl' : 'max-w-3xl'}`}>
-                            {/* Editor Column */}
-                            <div className={`relative h-full flex-1 flex flex-col ${showPreview ? 'hidden lg:flex' : ''}`}>
-                                <div className="flex-1 relative min-h-[500px]">
-                                    {/* Ghost Text */}
-                                    <div 
-                                        ref={overlayRef}
-                                        className="absolute top-0 left-0 w-full h-full text-lg md:text-xl font-serif leading-relaxed text-transparent p-8 whitespace-pre-wrap break-words pointer-events-none z-0"
-                                    >
-                                        <span className="text-transparent">{content}</span>
-                                        <span className="text-gray-400 opacity-60 font-serif">{ghostText}</span>
-                                    </div>
-
-                                    <textarea
-                                        ref={editorRef}
-                                        value={content}
-                                        onChange={handleChange}
-                                        onSelect={handleSelect}
-                                        onMouseUp={handleMouseUp}
-                                        onScroll={(e) => overlayRef.current && (overlayRef.current.scrollTop = e.currentTarget.scrollTop)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Tab' && ghostText) {
-                                                e.preventDefault();
-                                                const newContent = content + ghostText;
-                                                setContent(newContent);
-                                                setGhostText('');
-                                                setTimeout(() => { if (editorRef.current) editorRef.current.selectionStart = editorRef.current.selectionEnd = newContent.length; }, 0);
-                                            }
-                                        }}
-                                        placeholder="Start writing..."
-                                        className="w-full h-full bg-transparent border-none focus:ring-0 text-lg md:text-xl font-serif leading-relaxed text-gray-800 dark:text-gray-200 resize-none outline-none p-8 relative z-10"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Preview Column */}
-                            {showPreview && (
-                                <div className="flex-1 h-full overflow-y-auto p-8 border-2 border-black dark:border-white bg-nb-paper dark:bg-nb-darkPaper shadow-neo animate-in fade-in slide-in-from-right-4">
-                                     <div className="flex items-center gap-2 mb-6 opacity-50 border-b border-black pb-2">
-                                        <Eye className="w-4 h-4" /> <span className="text-xs font-bold uppercase">Preview</span>
-                                     </div>
-                                     <div className="markdown-preview font-serif text-lg text-gray-800 dark:text-gray-200" dangerouslySetInnerHTML={{ __html: parse(content || '') as string }} />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ) : (
-                    // LIBRARY VIEW
-                    <LibraryView 
-                        documents={documents}
-                        databases={databases}
-                        currentDatabaseId={currentDatabaseId}
-                        cmsConnections={cmsConnections}
-                        onOpenDoc={setCurrentDocId}
-                        onDeleteDoc={handleDeleteDoc}
-                        onCreateDoc={() => handleCreateDoc(currentDatabaseId || undefined)}
+                {appMode === AppMode.READ ? (
+                    <ReadingListView 
+                        items={readingList}
+                        onAddItem={(item) => setReadingList(prev => [item, ...prev])}
+                        onUpdateItem={(updated) => setReadingList(prev => prev.map(i => i.id === updated.id ? updated : i))}
+                        onDeleteItem={(id) => setReadingList(prev => prev.filter(i => i.id !== id))}
                     />
+                ) : (
+                    currentDocId ? (
+                        // EDITOR VIEW
+                        <div className="h-full flex justify-center overflow-y-auto">
+                            <div className={`relative h-full transition-all duration-300 w-full flex gap-6 p-4 ${showPreview ? 'max-w-7xl' : 'max-w-3xl'}`}>
+                                {/* Editor Column */}
+                                <div className={`relative h-full flex-1 flex flex-col ${showPreview ? 'hidden lg:flex' : ''}`}>
+                                    <div className="flex-1 relative min-h-[500px]">
+                                        {/* Ghost Text */}
+                                        <div 
+                                            ref={overlayRef}
+                                            className="absolute top-0 left-0 w-full h-full text-lg md:text-xl font-serif leading-relaxed text-transparent p-8 whitespace-pre-wrap break-words pointer-events-none z-0"
+                                        >
+                                            <span className="text-transparent">{content}</span>
+                                            <span className="text-gray-400 opacity-60 font-serif">{ghostText}</span>
+                                        </div>
+
+                                        <textarea
+                                            ref={editorRef}
+                                            value={content}
+                                            onChange={handleChange}
+                                            onSelect={handleSelect}
+                                            onMouseUp={handleMouseUp}
+                                            onScroll={(e) => overlayRef.current && (overlayRef.current.scrollTop = e.currentTarget.scrollTop)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Tab' && ghostText) {
+                                                    e.preventDefault();
+                                                    const newContent = content + ghostText;
+                                                    setContent(newContent);
+                                                    setGhostText('');
+                                                    setTimeout(() => { if (editorRef.current) editorRef.current.selectionStart = editorRef.current.selectionEnd = newContent.length; }, 0);
+                                                }
+                                            }}
+                                            placeholder="Start writing..."
+                                            className="w-full h-full bg-transparent border-none focus:ring-0 text-lg md:text-xl font-serif leading-relaxed text-gray-800 dark:text-gray-200 resize-none outline-none p-8 relative z-10"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Preview Column */}
+                                {showPreview && (
+                                    <div className="flex-1 h-full overflow-y-auto p-8 border-2 border-black dark:border-white bg-nb-paper dark:bg-nb-darkPaper shadow-neo animate-in fade-in slide-in-from-right-4">
+                                        <div className="flex items-center gap-2 mb-6 opacity-50 border-b border-black pb-2">
+                                            <Eye className="w-4 h-4" /> <span className="text-xs font-bold uppercase">Preview</span>
+                                        </div>
+                                        <div className="markdown-preview font-serif text-lg text-gray-800 dark:text-gray-200" dangerouslySetInnerHTML={{ __html: parse(content || '') as string }} />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        // LIBRARY VIEW
+                        <LibraryView 
+                            documents={documents}
+                            databases={databases}
+                            currentDatabaseId={currentDatabaseId}
+                            cmsConnections={cmsConnections}
+                            onOpenDoc={(id) => { setCurrentDocId(id); setAppMode(AppMode.WRITE); }}
+                            onDeleteDoc={handleDeleteDoc}
+                            onCreateDoc={() => handleCreateDoc(currentDatabaseId || undefined)}
+                        />
+                    )
                 )}
             </main>
         </div>
@@ -577,7 +631,7 @@ function App() {
                     }
                 }}
                 savedArticles={savedArticles}
-                onSaveArticle={a => setSavedArticles(prev => [...prev, a])}
+                onSaveArticle={handleSaveArticle}
             />
         )}
 

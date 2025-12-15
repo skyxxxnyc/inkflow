@@ -236,3 +236,77 @@ export const optimizeResume = async (jobInput: string, currentResumeFiles: FileA
         return "Error optimizing resume. Please ensure the Job URL is accessible or paste the description directly.";
     }
 };
+
+// --- MODULE: READING LIST INSIGHTS ---
+
+export const getArticleInsights = async (url: string, title: string): Promise<string> => {
+    const ai = getAi();
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `I have saved this article to my reading list. Please provide a concise summary (3 bullet points) and one "Key Takeaway" for a writer.
+            
+            Article Title: "${title}"
+            Article URL: "${url}"
+            
+            If you can't access the specific URL content, infer the likely content from the title and domain, but mention that it is an estimation.`,
+            config: {
+                tools: [{ googleSearch: {} }], // Use search to find the article content
+            }
+        });
+        return response.text || "Could not generate insights.";
+    } catch (e) {
+        console.error("Insight Error", e);
+        return "Error generating insights.";
+    }
+};
+
+export const findRelatedArticles = async (topic: string): Promise<any[]> => {
+    const ai = getAi();
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Find 5 high-quality, recent articles or blog posts about: "${topic}".
+            Return them in a structured list with Title and URL.`,
+            config: {
+                tools: [{ googleSearch: {} }],
+            }
+        });
+        
+        // Extract from grounding chunks for accuracy
+        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        
+        // Map chunks to a cleaner format. 
+        // Note: Grounding chunks structure varies, but usually has web object.
+        const articles = chunks
+            .filter((c: any) => c.web?.uri && c.web?.title)
+            .map((c: any) => ({
+                title: c.web.title,
+                url: c.web.uri,
+                domain: new URL(c.web.uri).hostname.replace('www.', '')
+            }));
+            
+        // Deduplicate
+        const unique = articles.filter((v: any,i: number,a: any)=>a.findIndex((v2: any)=>(v2.url===v.url))===i);
+        return unique.slice(0, 5);
+    } catch (e) {
+        console.error("Discovery Error", e);
+        return [];
+    }
+};
+
+export const generateSocialShare = async (title: string, summary: string): Promise<string> => {
+     const ai = getAi();
+     try {
+         const response = await ai.models.generateContent({
+             model: 'gemini-2.5-flash',
+             contents: `Write a catchy LinkedIn/Twitter post sharing this article. Use emojis and hashtags.
+             
+             Article: ${title}
+             Summary: ${summary}`
+         });
+         return response.text || "";
+     } catch (e) {
+         return "";
+     }
+}

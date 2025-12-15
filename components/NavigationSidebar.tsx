@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Layout, Plus, Settings, Globe, Database as DbIcon, FileText, ChevronRight, X, Trash2, LogOut, User as UserIcon } from 'lucide-react';
-import { Document, CMSConnection, Database, User } from '../types';
+import { Layout, Plus, Settings, Globe, Database as DbIcon, FileText, ChevronRight, X, Trash2, LogOut, User as UserIcon, Bookmark } from 'lucide-react';
+import { Document, CMSConnection, Database, User, AppMode } from '../types';
 
 interface NavigationSidebarProps {
     documents: Document[];
@@ -15,9 +15,11 @@ interface NavigationSidebarProps {
     onCreateDatabase: (name: string) => void;
     onDeleteDatabase: (id: string) => void;
     onGoToLibrary: () => void;
+    onGoToReader: () => void;
     onOpenCMSSettings: () => void;
     onLogout: () => void;
     cmsConnections: CMSConnection[];
+    currentMode: AppMode;
 }
 
 export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({ 
@@ -32,9 +34,11 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     onCreateDatabase,
     onDeleteDatabase,
     onGoToLibrary, 
+    onGoToReader,
     onOpenCMSSettings,
     onLogout,
-    cmsConnections
+    cmsConnections,
+    currentMode
 }) => {
     const [isCreatingDb, setIsCreatingDb] = useState(false);
     const [newDbName, setNewDbName] = useState('');
@@ -47,8 +51,6 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
         }
     };
 
-    // Group recent docs (filtered by current context/database potentially, but keep global recents for now or contextual?)
-    // Let's keep recents as global for easy access.
     const recentDocs = [...documents].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5);
 
     return (
@@ -65,10 +67,17 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
             <div className="p-4 space-y-2">
                 <button 
                     onClick={onGoToLibrary}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm border-2 border-transparent transition-all ${!currentDocId && !currentDatabaseId ? 'bg-nb-yellow border-black shadow-neo-sm font-bold' : 'hover:bg-gray-200 dark:hover:bg-gray-800'}`}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm border-2 transition-all ${currentMode === AppMode.WRITE && !currentDocId && !currentDatabaseId ? 'bg-nb-yellow border-black shadow-neo-sm font-bold text-black' : 'border-transparent hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
                 >
                     <Layout className="w-4 h-4" />
-                    <span className="text-sm uppercase tracking-wide">All Docs</span>
+                    <span className="text-sm uppercase tracking-wide">Write</span>
+                </button>
+                <button 
+                    onClick={onGoToReader}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-sm border-2 transition-all ${currentMode === AppMode.READ ? 'bg-nb-blue border-black shadow-neo-sm font-bold text-black' : 'border-transparent hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
+                >
+                    <Bookmark className="w-4 h-4" />
+                    <span className="text-sm uppercase tracking-wide">Read</span>
                 </button>
             </div>
 
