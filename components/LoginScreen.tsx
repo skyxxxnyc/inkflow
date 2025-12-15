@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { User } from '../types';
 import { ArrowRight, Loader2, Sparkles } from 'lucide-react';
@@ -30,9 +29,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         setTimeout(() => {
             setLoading(false);
             
+            // Generate a stable ID based on email so data persists for this "user"
+            const simpleHash = (str: string) => {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    const char = str.charCodeAt(i);
+                    hash = (hash << 5) - hash + char;
+                    hash = hash & hash;
+                }
+                return Math.abs(hash).toString(16);
+            };
+
+            const userId = simpleHash(email.toLowerCase().trim());
+
             // Create dummy user
             const user: User = {
-                id: Date.now().toString(),
+                id: userId,
                 email,
                 name: isLogin ? email.split('@')[0] : name,
                 avatar: `https://api.dicebear.com/7.x/notionists/svg?seed=${email}`

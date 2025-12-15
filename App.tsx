@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { DraftingSidebar } from './components/DraftingSidebar';
 import { FloatingMenu } from './components/FloatingMenu';
@@ -15,6 +14,9 @@ import { PromptSettings, DEFAULT_PROMPT_SETTINGS, Article, Document, DocumentSta
 import { parse } from 'marked';
 import { jsPDF } from 'jspdf';
 
+// Helper to generate keys based on user ID
+const getStorageKey = (key: string, userId: string) => `inkflow_${key}_${userId}`;
+
 function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false); // Right sidebar
@@ -29,49 +31,20 @@ function App() {
       return savedUser ? JSON.parse(savedUser) : null;
   });
 
-  // --- DATABASE STATE ---
-  const [databases, setDatabases] = useState<Database[]>(() => {
-      const saved = localStorage.getItem('inkflow_databases');
-      return saved ? JSON.parse(saved) : [];
-  });
-  
-  // View Context: If currentDocId is null, we are in Library. 
-  // If currentDatabaseId is set, we filter Library by that DB.
+  // --- DATA STATE (Initialized Empty, populated by Effect) ---
+  const [databases, setDatabases] = useState<Database[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [cmsConnections, setCmsConnections] = useState<CMSConnection[]>([]);
+  const [savedArticles, setSavedArticles] = useState<Article[]>([]);
+  const [promptSettings, setPromptSettings] = useState<PromptSettings>(DEFAULT_PROMPT_SETTINGS);
+
+  // View Context
   const [currentDatabaseId, setCurrentDatabaseId] = useState<string | null>(null);
-
-  // --- DOCUMENT MANAGEMENT STATE ---
-  const [documents, setDocuments] = useState<Document[]>(() => {
-      const savedDocs = localStorage.getItem('inkflow_documents');
-      if (savedDocs) return JSON.parse(savedDocs);
-      
-      // Migration from old single-doc version
-      const oldContent = localStorage.getItem('inkflow_content');
-      if (oldContent) {
-          const newDoc: Document = {
-              id: 'migrated-doc',
-              title: 'Untitled Draft',
-              content: oldContent,
-              status: DocumentStatus.DRAFT,
-              tags: [],
-              createdAt: Date.now(),
-              updatedAt: Date.now()
-          };
-          return [newDoc];
-      }
-      return [];
-  });
-
   const [currentDocId, setCurrentDocId] = useState<string | null>(null);
   
   // Local edit content state (synced to currentDocId on save/switch)
   const [content, setContent] = useState('');
   
-  // CMS Connections State
-  const [cmsConnections, setCmsConnections] = useState<CMSConnection[]>(() => {
-      const saved = localStorage.getItem('inkflow_cms_connections');
-      return saved ? JSON.parse(saved) : [];
-  });
-
   // Editor UI State
   const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
   const [selectedText, setSelectedText] = useState('');
@@ -80,15 +53,6 @@ function App() {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [isListening, setIsListening] = useState(false);
 
-  // Settings & Undo
-  const [promptSettings, setPromptSettings] = useState<PromptSettings>(() => {
-      const saved = localStorage.getItem('inkflow_prompt_settings');
-      return saved ? JSON.parse(saved) : DEFAULT_PROMPT_SETTINGS;
-  });
-  const [savedArticles, setSavedArticles] = useState<Article[]>(() => {
-      const saved = localStorage.getItem('inkflow_saved_articles');
-      return saved ? JSON.parse(saved) : [];
-  });
   const [lastSuggestion, setLastSuggestion] = useState<{ original: string, replacement: string } | null>(null);
   
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -104,6 +68,67 @@ function App() {
     else document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
+  // --- LOAD USER DATA ---
+  useEffect(() => {
+    if (user) {
+        const userId = user.id;
+
+        // Helper to load or default
+        const load = (key: string, defaultVal: any) => {
+            const saved = localStorage.getItem(getStorageKey(key, userId));
+            return saved ? JSON.parse(saved) : defaultVal;
+        };
+
+        setDatabases(load('databases', []));
+        setCmsConnections(load('cms_connections', []));
+        setSavedArticles(load('saved_articles', []));
+        setPromptSettings(load('prompt_settings', DEFAULT_PROMPT_SETTINGS));
+
+        // Documents have special migration logic for legacy data
+        const savedDocs = localStorage.getItem(getStorageKey('documents', userId));
+        if (savedDocs) {
+            setDocuments(JSON.parse(savedDocs));
+        } else {
+            // Check for legacy global data to migrate
+            const legacyDocs = localStorage.getItem('inkflow_documents');
+            if (legacyDocs) {
+                // If this is the very first user login after update, maybe migrate?
+                // For safety, let's just copy it for this user so they don't lose work.
+                setDocuments(JSON.parse(legacyDocs));
+            } else {
+                setDocuments([]);
+            }
+        }
+    } else {
+        // Clear state on logout
+        setDatabases([]);
+        setDocuments([]);
+        setCmsConnections([]);
+        setSavedArticles([]);
+        setPromptSettings(DEFAULT_PROMPT_SETTINGS);
+        setCurrentDocId(null);
+        setCurrentDatabaseId(null);
+    }
+  }, [user]);
+
+  // --- PERSIST USER DATA ---
+  useEffect(() => {
+      if (user) localStorage.setItem(getStorageKey('databases', user.id), JSON.stringify(databases));
+  }, [databases, user]);
+
+  useEffect(() => {
+      if (user) localStorage.setItem(getStorageKey('cms_connections', user.id), JSON.stringify(cmsConnections));
+  }, [cmsConnections, user]);
+  
+  useEffect(() => {
+      if (user) localStorage.setItem(getStorageKey('saved_articles', user.id), JSON.stringify(savedArticles));
+  }, [savedArticles, user]);
+  
+  useEffect(() => {
+      if (user) localStorage.setItem(getStorageKey('prompt_settings', user.id), JSON.stringify(promptSettings));
+  }, [promptSettings, user]);
+
+
   // Load Content when Doc Switches
   useEffect(() => {
     if (currentDocId) {
@@ -112,11 +137,11 @@ function App() {
     } else {
         setContent(''); // Library view
     }
-  }, [currentDocId]);
+  }, [currentDocId, documents]);
 
   // Auto-Save Content to Documents Array & Persistence
   useEffect(() => {
-    if (!currentDocId) return;
+    if (!currentDocId || !user) return;
     
     setSaveStatus('saving');
     const timeoutId = setTimeout(() => {
@@ -139,25 +164,15 @@ function App() {
                 }
                 return doc;
             });
-            // Persist entire array
-            localStorage.setItem('inkflow_documents', JSON.stringify(newDocs));
+            // Persist for USER
+            localStorage.setItem(getStorageKey('documents', user.id), JSON.stringify(newDocs));
             return newDocs;
         });
         setSaveStatus('saved');
     }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [content, currentDocId]);
-
-  // Persist CMS connections
-  useEffect(() => {
-      localStorage.setItem('inkflow_cms_connections', JSON.stringify(cmsConnections));
-  }, [cmsConnections]);
-
-  // Persist Databases
-  useEffect(() => {
-      localStorage.setItem('inkflow_databases', JSON.stringify(databases));
-  }, [databases]);
+  }, [content, currentDocId, user]);
 
 
   // Voice Recognition Setup
@@ -213,7 +228,7 @@ function App() {
           // Unlink documents
           setDocuments(prev => {
               const updated = prev.map(doc => doc.databaseId === id ? { ...doc, databaseId: undefined } : doc);
-              localStorage.setItem('inkflow_documents', JSON.stringify(updated));
+              if (user) localStorage.setItem(getStorageKey('documents', user.id), JSON.stringify(updated));
               return updated;
           });
           if (currentDatabaseId === id) setCurrentDatabaseId(null);
@@ -233,7 +248,7 @@ function App() {
       };
       setDocuments(prev => {
           const updated = [...prev, newDoc];
-          localStorage.setItem('inkflow_documents', JSON.stringify(updated));
+          if (user) localStorage.setItem(getStorageKey('documents', user.id), JSON.stringify(updated));
           return updated;
       });
       setCurrentDocId(newDoc.id);
@@ -243,7 +258,7 @@ function App() {
       if (confirm('Are you sure you want to delete this document?')) {
         setDocuments(prev => {
             const updated = prev.filter(d => d.id !== id);
-            localStorage.setItem('inkflow_documents', JSON.stringify(updated));
+            if (user) localStorage.setItem(getStorageKey('documents', user.id), JSON.stringify(updated));
             return updated;
         });
         if (currentDocId === id) setCurrentDocId(null);
@@ -570,7 +585,7 @@ function App() {
             isOpen={settingsOpen}
             onClose={() => setSettingsOpen(false)}
             settings={promptSettings}
-            onSave={s => { setPromptSettings(s); localStorage.setItem('inkflow_prompt_settings', JSON.stringify(s)); }}
+            onSave={s => { setPromptSettings(s); if(user) localStorage.setItem(getStorageKey('prompt_settings', user.id), JSON.stringify(s)); }}
         />
 
         <CMSConfigModal 

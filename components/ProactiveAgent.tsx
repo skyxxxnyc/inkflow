@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { Lightbulb, X, Search, Check, ArrowRight, ChevronDown, ExternalLink, Globe, RotateCcw, Bookmark } from 'lucide-react';
 import { getSmartSuggestions, checkFacts } from '../services/geminiService';
@@ -30,60 +29,66 @@ const NewsCard: React.FC<{ chunk: any, isSaved: boolean, onToggleSave: (article:
 
     return (
         <div 
-            className="border-2 border-black dark:border-white bg-white dark:bg-nb-darkBg p-3 transition-all hover:shadow-neo-sm group"
+            className={`border-2 border-black dark:border-white bg-white dark:bg-nb-darkBg transition-all hover:shadow-neo-sm group ${expanded ? 'shadow-neo-sm' : ''}`}
         >
             <div 
-                className="flex justify-between items-start gap-2"
+                className="p-3 flex justify-between items-start gap-3 cursor-pointer select-none"
+                onClick={() => setExpanded(!expanded)}
             >
-                <div 
-                    className="flex items-start gap-2 overflow-hidden cursor-pointer flex-1"
-                    onClick={() => setExpanded(!expanded)}
-                >
-                    <div className="mt-0.5 min-w-[16px]">
+                <div className="flex items-start gap-2 flex-1 overflow-hidden">
+                    <div className="mt-0.5 min-w-[16px] flex-shrink-0">
                          <Globe className="w-3 h-3 text-nb-blue" />
                     </div>
-                    <div>
-                        <h5 className="font-bold text-xs leading-snug text-black dark:text-white group-hover:underline decoration-2 underline-offset-2">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                        <h5 className="font-bold text-xs leading-snug text-black dark:text-white group-hover:underline decoration-2 underline-offset-2 truncate">
                             {chunk.web.title || "Untitled Source"}
                         </h5>
-                         <div className="text-[10px] font-bold text-gray-500 uppercase mt-0.5">
+                         <div className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1 truncate">
                             {domain}
+                            {!expanded && <span className="opacity-50 hidden sm:inline">• Click to expand</span>}
                         </div>
                     </div>
                 </div>
                 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-shrink-0">
                      <button 
-                        onClick={() => onToggleSave(articleData)}
-                        className={`p-1 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${isSaved ? 'text-nb-purple' : 'text-gray-400 hover:text-nb-purple'}`}
+                        onClick={(e) => { e.stopPropagation(); onToggleSave(articleData); }}
+                        className={`p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors rounded-sm ${isSaved ? 'text-nb-purple' : 'text-gray-400 hover:text-nb-purple'}`}
                         title={isSaved ? "Remove from Saved" : "Save for Later"}
                     >
                         <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
                     </button>
-                    <button 
-                        onClick={() => setExpanded(!expanded)}
-                        className="text-black dark:text-white opacity-50 hover:opacity-100 p-1"
-                    >
+                    <div className="text-black dark:text-white opacity-50 p-1">
                         <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
-                    </button>
+                    </div>
                 </div>
             </div>
 
             {expanded && (
-                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 animate-in slide-in-from-top-2">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 break-all font-mono mb-3 bg-gray-50 dark:bg-black p-2 rounded-sm">
-                        {chunk.web.uri}
-                    </p>
-                    
-                    <a 
-                        href={chunk.web.uri}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-center gap-2 w-full py-2 bg-black text-white dark:bg-white dark:text-black font-bold text-xs uppercase hover:opacity-80 transition-opacity"
-                    >
-                        <ExternalLink className="w-3 h-3" />
-                        Read Article
-                    </a>
+                <div className="px-3 pb-3 pt-0 animate-in slide-in-from-top-2">
+                    <div className="pt-3 border-t-2 border-dashed border-gray-100 dark:border-gray-700">
+                        {/* Try to show snippet if available in the chunk object - falling back to title if no snippet */}
+                        <p className="text-xs text-gray-600 dark:text-gray-300 mb-3 leading-relaxed font-serif">
+                            {chunk.web.snippet || chunk.web.content || "No preview available for this source."}
+                        </p>
+                        
+                        <div className="bg-gray-50 dark:bg-black p-2 mb-3 border border-gray-100 dark:border-gray-800 flex items-center gap-2" title={chunk.web.uri}>
+                             <div className="flex-1 truncate text-[10px] font-mono text-gray-500">
+                                {chunk.web.uri}
+                             </div>
+                        </div>
+
+                        <a 
+                            href={chunk.web.uri}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center justify-center gap-2 w-full py-2 bg-black text-white dark:bg-white dark:text-black font-bold text-xs uppercase hover:opacity-80 transition-opacity"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <ExternalLink className="w-3 h-3" />
+                            Read Full Article
+                        </a>
+                    </div>
                 </div>
             )}
         </div>
