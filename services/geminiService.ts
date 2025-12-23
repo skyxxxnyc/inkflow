@@ -8,7 +8,7 @@ export const getSmartSuggestions = async (text: string): Promise<{ suggestion: s
     if (!text || text.length < 50) return null;
 
     const ai = getAi();
-    
+
     // We use Flash for quick, background analysis
     try {
         const response = await ai.models.generateContent({
@@ -54,7 +54,7 @@ export const getSmartSuggestions = async (text: string): Promise<{ suggestion: s
 
 export const rewriteSelection = async (selection: string, instruction: string, context: string): Promise<string> => {
     const ai = getAi();
-    
+
     // Use Pro for high quality rewriting
     try {
         const response = await ai.models.generateContent({
@@ -78,18 +78,18 @@ export const rewriteSelection = async (selection: string, instruction: string, c
 
 export const draftFromScratch = async (prompt: string, context: string, files: FileAttachment[]): Promise<string> => {
     const ai = getAi();
-    
+
     const parts: any[] = [];
-    
+
     // Add text prompt
     let fullPrompt = `You are a thought partner. Write a draft based on this request: ${prompt}`;
-    
+
     if (context) {
         fullPrompt += `\n\nAdditional Context/Background Information:\n${context}`;
     }
-    
+
     parts.push({ text: fullPrompt });
-    
+
     // Add files
     files.forEach(f => {
         // strip data:image/png;base64, prefix if present
@@ -138,11 +138,11 @@ export const getCompletion = async (text: string): Promise<string> => {
 
 export const chatWithPartner = async (history: ChatMessage[], newMessage: string, currentDocContext: string): Promise<string> => {
     const ai = getAi();
-    
+
     // Construct history for Gemini
     // We inject the document context as a "hidden" user message at the start or via system instructions.
     // To keep it fresh, we'll treat it as a fresh stateless request with history included.
-    
+
     const contents: any[] = [
         {
             role: 'user',
@@ -198,7 +198,7 @@ export const checkFacts = async (text: string): Promise<any> => {
                 tools: [{ googleSearch: {} }],
             }
         });
-        
+
         const grounding = response.candidates?.[0]?.groundingMetadata;
         return {
             text: response.text,
@@ -241,9 +241,10 @@ export const generateSeoArticle = async (topic: string, keywords: string, audien
 export const optimizeResume = async (jobInput: string, currentResumeFiles: FileAttachment[]): Promise<string> => {
     const ai = getAi();
     const parts: any[] = [];
-    
+
     // Add prompt
-    parts.push({ text: `You are an expert Resume Writer and Career Coach.
+    parts.push({
+        text: `You are an expert Resume Writer and Career Coach.
     
     Task: Rewrite and optimize the user's resume for a specific job.
     
@@ -258,7 +259,7 @@ export const optimizeResume = async (jobInput: string, currentResumeFiles: FileA
     6. Output the full optimized resume in Markdown.
     
     After the resume, include a brief Cover Letter draft.` });
-    
+
     // Add resume files
     currentResumeFiles.forEach(f => {
         const base64Data = f.data.split(',')[1] || f.data;
@@ -321,10 +322,10 @@ export const findRelatedArticles = async (topic: string): Promise<any[]> => {
                 tools: [{ googleSearch: {} }],
             }
         });
-        
+
         // Extract from grounding chunks for accuracy
         const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-        
+
         // Map chunks to a cleaner format. 
         // Note: Grounding chunks structure varies, but usually has web object.
         const articles = chunks
@@ -336,9 +337,9 @@ export const findRelatedArticles = async (topic: string): Promise<any[]> => {
                 snippet: c.web.snippet || "",
                 date: "Recently Indexed"
             }));
-            
+
         // Deduplicate
-        const unique = articles.filter((v: any,i: number,a: any)=>a.findIndex((v2: any)=>(v2.url===v.url))===i);
+        const unique = articles.filter((v: any, i: number, a: any) => a.findIndex((v2: any) => (v2.url === v.url)) === i);
         return unique.slice(0, 5);
     } catch (e) {
         console.error("Discovery Error", e);
@@ -347,17 +348,37 @@ export const findRelatedArticles = async (topic: string): Promise<any[]> => {
 };
 
 export const generateSocialShare = async (title: string, summary: string): Promise<string> => {
-     const ai = getAi();
-     try {
-         const response = await ai.models.generateContent({
-             model: 'gemini-2.5-flash',
-             contents: `Write a catchy LinkedIn/Twitter post sharing this article. Use emojis and hashtags.
+    const ai = getAi();
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Write a catchy LinkedIn/Twitter post sharing this article. Use emojis and hashtags.
              
              Article: ${title}
              Summary: ${summary}`
-         });
-         return response.text || "";
-     } catch (e) {
-         return "";
-     }
+        });
+        return response.text || "";
+    } catch (e) {
+        return "";
+    }
+}
+
+export const enhancePrompt = async (prompt: string): Promise<string> => {
+    const ai = getAi();
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-preview',
+            contents: `You are an expert Prompt Engineer.
+            
+            Task: Take the following draft AI prompt and "enhance" it using industry best practices (persona assignment, clear task definition, constraints, output formatting, and few-shot examples if applicable).
+            
+            Original Prompt: "${prompt}"
+            
+            Return ONLY the enhanced prompt content. Do not include your own intro or outro.`,
+        });
+        return response.text || prompt;
+    } catch (e) {
+        console.error("Enhance Prompt Error", e);
+        return prompt;
+    }
 }

@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  avatar    String?
+  createdAt DateTime @default(now())
+  
+  databases      Database[]
+  documents      Document[]
+  readingItems   ReadingItem[]
+  cmsConnections CMSConnection[]
+  prompts        Prompt[]
+  settings       String   @default("{}") // JSON for PromptSettings
+}
+
+model Database {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  color       String   @default("#000000")
+  createdAt   DateTime @default(now())
+  viewType    String   @default("TABLE") // TABLE, GALLERY, LIST
+
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  documents   Document[]
+}
+
+model Document {
+  id              String   @id @default(uuid())
+  title           String
+  content         String
+  status          String   @default("Draft")
+  tags            String   // JSON string or comma separated
+  icon            String?
+  cover           String?
+  properties      String   @default("{}") // JSON for custom fields
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  
+  databaseId      String?
+  database        Database? @relation(fields: [databaseId], references: [id])
+  
+  cmsConnection   CMSConnection? @relation(fields: [cmsConnectionId], references: [id])
+  
+  parentId        String?
+  parent          Document? @relation("SubPages", fields: [parentId], references: [id])
+  subPages        Document[] @relation("SubPages")
+}
+
+model ReadingItem {
+  id         String   @id @default(uuid())
+  url        String
+  title      String
+  domain     String
+  excerpt    String?
+  image      String?
+  tags       String   // JSON string or comma separated
+  status     String   @default("unread")
+  addedAt    DateTime @default(now())
+  aiSummary  String?
+  sourceType String   @default("manual")
+  
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model CMSConnection {
+  id       String @id @default(uuid())
+  name     String
+  platform String
+  url      String?
+  apiKey   String?
+  
+  userId   String
+  user     User   @relation(fields: [userId], references: [id])
+  
+  documents Document[]
+}
+
+model Prompt {
+  id          String   @id @default(uuid())
+  title       String
+  content     String
+  description String?
+  category    String   @default("General")
+  tags        String   // JSON string
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+}

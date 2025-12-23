@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
+import { api } from '../services/api';
 import { ArrowRight, Loader2, Sparkles } from 'lucide-react';
 
 interface LoginScreenProps {
@@ -14,10 +15,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        
+
         if (!email || !password || (!isLogin && !name)) {
             setError('Please fill in all fields');
             return;
@@ -25,33 +26,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
         setLoading(true);
 
-        // Simulate API call
-        setTimeout(() => {
-            setLoading(false);
-            
-            // Generate a stable ID based on email so data persists for this "user"
-            const simpleHash = (str: string) => {
-                let hash = 0;
-                for (let i = 0; i < str.length; i++) {
-                    const char = str.charCodeAt(i);
-                    hash = (hash << 5) - hash + char;
-                    hash = hash & hash;
-                }
-                return Math.abs(hash).toString(16);
-            };
-
-            const userId = simpleHash(email.toLowerCase().trim());
-
-            // Create dummy user
-            const user: User = {
-                id: userId,
-                email,
-                name: isLogin ? email.split('@')[0] : name,
-                avatar: `https://api.dicebear.com/7.x/notionists/svg?seed=${email}`
-            };
-            
+        try {
+            // Call our new API
+            const user = await api.login(email.toLowerCase().trim(), isLogin ? email.split('@')[0] : name);
             onLogin(user);
-        }, 1500);
+        } catch (error) {
+            setError('Login failed. Please try again.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -69,7 +52,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     {!isLogin && (
                         <div className="space-y-1">
                             <label className="text-xs font-bold uppercase tracking-wider ml-1">Full Name</label>
-                            <input 
+                            <input
                                 type="text"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
@@ -78,10 +61,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                             />
                         </div>
                     )}
-                    
+
                     <div className="space-y-1">
                         <label className="text-xs font-bold uppercase tracking-wider ml-1">Email Address</label>
-                        <input 
+                        <input
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
@@ -92,7 +75,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
                     <div className="space-y-1">
                         <label className="text-xs font-bold uppercase tracking-wider ml-1">Password</label>
-                        <input 
+                        <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
@@ -107,7 +90,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                         </div>
                     )}
 
-                    <button 
+                    <button
                         type="submit"
                         disabled={loading}
                         className="w-full py-4 bg-black dark:bg-white text-white dark:text-black font-black uppercase tracking-widest text-lg shadow-neo hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-neo-sm active:translate-x-[4px] active:translate-y-[4px] active:shadow-none transition-all flex items-center justify-center gap-2 mt-6"
@@ -121,7 +104,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 </form>
 
                 <div className="mt-6 text-center">
-                    <button 
+                    <button
                         onClick={() => { setIsLogin(!isLogin); setError(''); }}
                         className="text-xs font-bold uppercase underline decoration-2 underline-offset-4 hover:text-nb-purple transition-colors"
                     >

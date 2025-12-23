@@ -2,7 +2,8 @@
 export enum AppMode {
     WRITE = 'WRITE',
     DRAFT = 'DRAFT',
-    READ = 'READ' // New mode for Pocket clone
+    READ = 'READ',
+    PROMPTS = 'PROMPTS'
 }
 
 export enum DocumentStatus {
@@ -38,6 +39,8 @@ export interface Database {
     id: string;
     name: string;
     description?: string;
+    viewType: 'TABLE' | 'GALLERY' | 'LIST';
+    color: string;
     createdAt: number;
 }
 
@@ -46,8 +49,12 @@ export interface Document {
     title: string;
     content: string;
     status: DocumentStatus;
+    icon?: string;
+    cover?: string;
+    properties: Record<string, any>;
     cmsConnectionId?: string;
     databaseId?: string;
+    parentId?: string;
     tags: string[];
     createdAt: number;
     updatedAt: number;
@@ -89,6 +96,17 @@ export interface FileAttachment {
     data: string; // base64
 }
 
+export interface AIPrompt {
+    id: string;
+    title: string;
+    content: string;
+    description: string;
+    category: string;
+    tags: string[];
+    createdAt: number;
+    updatedAt: number;
+}
+
 // Deprecated in favor of ReadingItem, but kept for legacy props compatibility if needed
 export interface Article {
     title: string;
@@ -105,6 +123,7 @@ export interface PromptSettings {
     casual: string;
     concise: string;
     summarize: string;
+    savedArticles?: Article[];
 }
 
 export const DEFAULT_PROMPT_SETTINGS: PromptSettings = {

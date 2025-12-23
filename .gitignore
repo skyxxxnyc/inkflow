@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# SQLite
+server/prisma/dev.db
+server/prisma/dev.db-journal
+
+# Apple Double files
+._*
+**/._*
