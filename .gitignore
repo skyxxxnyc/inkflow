@@ -30,3 +30,4 @@ server/prisma/dev.db-journal
 # Apple Double files
 ._*
 **/._*
+server/.env
